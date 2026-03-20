@@ -12,8 +12,11 @@ const router = useRouter();
 const username = ref('l2hadmin');
 const password = ref('l2hpassword');
 const error = ref('');
+const loading = ref(false);
 
 const handleLogin = async () => {
+    loading.value = true;
+    error.value = '';
     try {
         const resp = await api.post('/api/login', {
             username: username.value,
@@ -24,6 +27,8 @@ const handleLogin = async () => {
         router.push('/');
     } catch (e: any) {
         error.value = e.response?.data?.error || '登录失败，请检查用户名和密码';
+    } finally {
+        loading.value = false;
     }
 };
 </script>
@@ -49,7 +54,14 @@ const handleLogin = async () => {
 
         <Message v-if="error" severity="error" variant="simple">{{ error }}</Message>
 
-        <Button label="登录" class="w-full py-4 rounded-xl font-bold text-lg bg-blue-500 hover:bg-blue-600 border-none mt-4 transition-all hover:scale-[1.02] active:scale-95 shadow-lg shadow-blue-500/20" @click="handleLogin" />
+        <Button :loading="loading" @click="handleLogin" class="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 border-none py-3 mt-4 rounded-xl font-bold text-lg shadow-lg shadow-blue-500/30 transition-all active:scale-[0.98]">
+            登 录
+        </Button>
+
+        <div class="text-center mt-4 text-slate-400 text-sm">
+            没有账号？
+            <router-link to="/register" class="text-blue-400 hover:text-blue-300 transition-colors font-medium">去注册</router-link>
+        </div>
       </form>
 
       <div class="text-center text-xs text-slate-500 mt-10">

@@ -1,0 +1,6 @@
+node_modules
+l2h.db
+src/admin/node_modules
+src/admin/dist
+*.log
+.env

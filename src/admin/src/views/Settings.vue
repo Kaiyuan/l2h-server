@@ -12,6 +12,7 @@ const oldPassword = ref('');
 const newPassword = ref('');
 const confirmPassword = ref('');
 const loading = ref(false);
+const couponCode = ref('');
 const message = ref({ text: '', severity: '' as 'success' | 'error' | 'info' | 'secondary' | 'warn' | undefined });
 
 const fetchUser = async () => {
@@ -19,7 +20,7 @@ const fetchUser = async () => {
         const resp = await api.get('/api/user/me');
         apiKey.value = resp.data.api_key;
     } catch (e) {
-        console.error('Failed to fetch user info');
+        console.error('获取用户信息失败');
     }
 };
 
@@ -28,7 +29,7 @@ const fetchSettings = async () => {
         const resp = await api.get('/admin-api/settings');
         if (resp.data.admin_path) adminPath.value = resp.data.admin_path;
     } catch (e) {
-        console.error('Failed to fetch settings');
+        console.error('获取设置失败');
     }
 };
 
@@ -37,7 +38,7 @@ const saveSettings = async () => {
     try {
         await api.post('/admin-api/settings', {
             admin_path: adminPath.value,
-            // Add more as needed
+            // 根据需要添加更多
         });
         message.value = { text: '全局配置已保存', severity: 'success' };
     } catch (e) {
@@ -83,6 +84,20 @@ const changePassword = async () => {
 const copyKey = () => {
     navigator.clipboard.writeText(apiKey.value);
     message.value = { text: 'API KEY 已复制到剪贴板', severity: 'info' };
+};
+
+const handleRedeem = async () => {
+    if (!couponCode.value) return;
+    loading.value = true;
+    try {
+        const resp = await api.post('/api/user/redeem', { code: couponCode.value });
+        message.value = { text: resp.data.message || '兑换成功', severity: 'success' };
+        couponCode.value = '';
+    } catch (e: any) {
+        message.value = { text: e.response?.data?.error || '兑换失败', severity: 'error' };
+    } finally {
+        loading.value = false;
+    }
 };
 
 onMounted(() => {
@@ -153,6 +168,22 @@ onMounted(() => {
                     </div>
                 </div>
                 <Button label="修改管理员密码" :loading="loading" class="w-full py-4 rounded-xl font-bold bg-purple-500 hover:bg-purple-600 border-none transition-all active:scale-95 text-white mt-4 shadow-lg shadow-purple-500/20" @click="changePassword" />
+            </div>
+        </div>
+
+        <!-- Redeem Section -->
+        <div class="bg-[#1e293b] border border-white/5 rounded-3xl p-10 glass space-y-8">
+            <div class="flex items-center gap-4 mb-4">
+                <div class="bg-indigo-500/10 p-4 rounded-2xl text-indigo-400"><Lock :size="24" /></div>
+                <h2 class="text-2xl font-black text-slate-100 tracking-tight">专属配额兑换</h2>
+            </div>
+            <div class="space-y-6 flex flex-col justify-between h-[calc(100%-80px)]">
+                <div class="flex flex-col gap-2">
+                    <label class="text-sm font-bold text-slate-400">兑换码</label>
+                    <InputText v-model="couponCode" class="bg-slate-800 border-white/5 rounded-xl px-4 py-3 text-sm font-mono text-indigo-400 uppercase" placeholder="请输入您的兑换码" />
+                    <p class="text-xs text-slate-500 italic mt-1 font-medium">* 兑换码可用于提升映射数量上限或其他专属权益。</p>
+                </div>
+                <Button label="立 即 兑 换" :loading="loading" class="w-full py-4 rounded-xl font-bold bg-indigo-500 hover:bg-indigo-600 border-none transition-all active:scale-95 text-white shadow-lg shadow-indigo-500/20" @click="handleRedeem" />
             </div>
         </div>
     </div>

@@ -20,19 +20,19 @@ const fetchPaths = async () => {
         const resp = await api.get('/api/paths');
         paths.value = resp.data;
     } catch (e) {
-        console.error('Failed to fetch paths:', e);
+        console.error('获取路径失败:', e);
     }
 };
 
 const addPath = async () => {
     try {
-        // Assume user_id = 1 for now (admin)
+        // 目前假设 user_id = 1 (管理员)
         await api.post('/api/paths', { ...newPath.value, user_id: JSON.parse(localStorage.getItem('user') || '{}').id || 1 });
         visible.value = false;
         newPath.value = { name: '', port: '' };
         await fetchPaths();
     } catch (e) {
-        alert('Failed to add path');
+        alert('添加路径失败');
     }
 };
 
@@ -42,7 +42,7 @@ const deletePath = async (id: number) => {
         await api.delete(`/api/paths/${id}`);
         await fetchPaths();
     } catch (e) {
-        alert('Failed to delete path');
+        alert('删除路径失败');
     }
 };
 
@@ -53,11 +53,11 @@ const editPath = (path: any) => {
 
 const updatePath = async () => {
     try {
-        await api.put(`/api/paths/${currentPath.value.id}`, currentPath.value);
+        await api.put(`/currentPath.value.id`, currentPath.value);
         editVisible.value = false;
         await fetchPaths();
     } catch (e) {
-        alert('Failed to update path');
+        alert('更新路径失败');
     }
 };
 

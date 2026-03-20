@@ -14,94 +14,96 @@ const app = new Hono();
 app.use('*', logger());
 app.use('*', cors());
 
-// Default values
+// 默认值
 const DEFAULT_ADMIN_PATH = config.ADMIN_PATH;
 const DEFAULT_PORT = config.PORT;
 
-// Middleware to check if admin is initialized
+// 中间件：检查管理员是否已初始化
 app.use('*', async (c, next) => {
   const adminUser = db.prepare('SELECT * FROM users WHERE role = ?').get('admin');
   const path = c.req.path;
   if (!adminUser && !path.startsWith('/setup') && !path.startsWith('/api/setup')) {
-    console.log('Redirecting to setup, no admin found');
+    console.log('未找到管理员，正在重定向到设置页面');
     return c.redirect('/setup');
   }
   await next();
 });
 
-// Routes
+// 路由
 app.route('/api', api);
 app.route('/admin-api', admin);
 
-// Add Global Error Handler back
+// 添加全局错误处理
 app.onError((err, c) => {
   if (err instanceof HTTPException) {
     return err.getResponse();
   }
-  console.error('Global Error:', err);
+  console.error('全局错误：', err);
   return c.text('Internal Server Error', 500);
 });
 
-// Serve Admin UI (Vite build)
+// 托管管理后台 UI (Vite 构建)
 app.use(`/${DEFAULT_ADMIN_PATH}/*`, serveStatic({ 
   root: './src/dist',
   rewriteRequestPath: (path) => path.replace(new RegExp(`^/${DEFAULT_ADMIN_PATH}`), '') || '/index.html'
 }));
 
-// Gateway Logic for mapping paths to clients
+// 网关逻辑：将路径映射到客户端
 app.all('/:path/*', async (c) => {
   const pathName = c.req.param('path');
-  const mapping = db.prepare('SELECT * FROM paths WHERE name = ? AND is_active = 1').get(pathName) as { port: number, user_id: number } | undefined;
-  
+  const mapping = db.prepare(
+    `SELECT p.port, p.user_id, u.api_key
+     FROM paths p JOIN users u ON p.user_id = u.id
+     WHERE p.name = ? AND p.is_active = 1`
+  ).get(pathName) as { port: number; user_id: number; api_key: string } | undefined;
+
   if (!mapping) {
     return c.notFound();
   }
 
-  // Find the WebRTC session for the user
-  // For now, we use a simple lookup by user's API Key if we have it, 
-  // but let's just get the first session for initial testing
-  const sessionId = webrtcManager.getFirstSessionId();
+  // 通过 API Key 路由到特定用户的 WebRTC 会话
+  const sessionId = webrtcManager.getSessionByApiKey(mapping.api_key);
   if (!sessionId) {
-    return c.text('No active host connected for this path', 503);
+    return c.text(`路径 "${pathName}" 的主机未连接`, 503);
   }
 
   try {
-    const fullPath = c.req.path.substring(pathName.length + 1); // Remove /path
+    const fullPath = c.req.path.substring(pathName.length + 1) || '/';
     const bodyBuffer = await c.req.arrayBuffer();
-    const bodyBase64 = bodyBuffer.byteLength > 0 
-      ? Buffer.from(bodyBuffer).toString('base64') 
+    const bodyBase64 = bodyBuffer.byteLength > 0
+      ? Buffer.from(bodyBuffer).toString('base64')
       : undefined;
 
     const proxyRequest = {
       method: c.req.method,
-      path: fullPath || '/',
+      path: fullPath,
       headers: c.req.header(),
       query: c.req.query(),
       targetPort: mapping.port,
       body: bodyBase64
     };
 
-    console.log(`Forwarding request to client: ${proxyRequest.method} ${proxyRequest.path} -> localhost:${mapping.port}`);
+    console.log(`[${mapping.api_key.slice(0, 8)}] ${proxyRequest.method} ${proxyRequest.path} -> :${mapping.port}`);
     const response = await webrtcManager.sendRequest(sessionId, proxyRequest);
 
     return c.newResponse(response.body, response.status, response.headers);
   } catch (err: any) {
-    console.error('Gateway Error:', err.message);
+    console.error('网关错误：', err.message);
     return c.text(err.message === 'Gateway Timeout' ? 'Host Timeout' : 'Gateway Error', 504);
   }
 });
 
-// Home page
+// 首页
 app.get('/', (c) => {
   const homeSetting = db.prepare("SELECT value FROM settings WHERE key = 'home_page_mode'").get() as { value: string } | undefined;
   if (homeSetting?.value === 'proxy') {
-    // Redirect to default proxy path if configured
-    return c.text('Welcome to l2h - Proxy Mode');
+    // 如果配置了默认代理路径，则重定向
+    return c.text('欢迎使用 l2h - 代理模式');
   }
-  return c.html('<h1>Welcome to l2h</h1><p>Link to Host Project</p>');
+  return c.html('<h1>Welcome to l2h</h1><p>Link to Host 项目</p>');
 });
 
-// Setup page (if no admin)
+// 设置页面（如果没有管理员）
 app.get('/setup', (c) => {
   return c.html(`
     <h1>Setup Admin</h1>
@@ -122,7 +124,7 @@ app.post('/api/setup', async (c) => {
   return c.redirect('/');
 });
 
-console.log(`Server started on http://localhost:${DEFAULT_PORT}`);
+console.log(`服务器已启动：http://localhost:${DEFAULT_PORT}`);
 serve({
   fetch: app.fetch,
   port: DEFAULT_PORT

@@ -45,30 +45,87 @@ api.post('/login', async (c) => {
   });
 });
 
+const registerSchema = z.object({
+  username: z.string(),
+  password: z.string(),
+  invitation_code: z.string()
+});
+
+api.post('/register', async (c) => {
+  const body = await c.req.json();
+  const result = registerSchema.safeParse(body);
+  if (!result.success) return c.json({ error: 'Invalid input' }, 400);
+
+  const { username, password, invitation_code } = result.data;
+  
+  const invite = db.prepare('SELECT id, expires_at FROM invitations WHERE code = ?').get(invitation_code) as any;
+  if (!invite) return c.json({ error: 'Invalid or expired invitation code' }, 400);
+  
+  if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
+    db.prepare('DELETE FROM invitations WHERE id = ?').run(invite.id);
+    return c.json({ error: 'Invitation code has expired' }, 400);
+  }
+
+  const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (existing) return c.json({ error: 'Username already exists' }, 400);
+
+  const api_key = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+
+  try {
+    db.prepare('INSERT INTO users (username, password, api_key) VALUES (?, ?, ?)').run(username, password, api_key);
+    db.prepare('DELETE FROM invitations WHERE id = ?').run(invite.id);
+    return c.json({ success: true });
+  } catch (e) {
+    return c.json({ error: 'Registration failed' }, 500);
+  }
+});
+
 api.get('/user/me', auth, (c) => {
     const payload = c.get('jwtPayload') as { id: number; username: string; role: string };
     if (!payload) return c.json({ error: 'Unauthorized' }, 401);
     
-    const user = db.prepare('SELECT id, username, role, api_key FROM users WHERE id = ?').get(payload.id) as any;
+    const user = db.prepare('SELECT id, username, role, api_key, url_limit FROM users WHERE id = ?').get(payload.id) as any;
     return c.json(user);
 });
 
+api.post('/user/redeem', auth, async (c) => {
+    const payload = c.get('jwtPayload') as any;
+    const body = await c.req.json();
+    const { code } = body;
+
+    const coupon = db.prepare('SELECT id, used_by FROM coupons WHERE code = ?').get(code) as any;
+    if (!coupon) return c.json({ error: 'Invalid coupon code' }, 400);
+    if (coupon.used_by) return c.json({ error: 'Coupon already used' }, 400);
+
+    try {
+        db.prepare('UPDATE coupons SET used_by = ? WHERE id = ?').run(payload.username, coupon.id);
+        db.prepare('UPDATE users SET url_limit = url_limit + 5 WHERE id = ?').run(payload.id);
+        return c.json({ success: true, message: 'Added 5 to URL limit' });
+    } catch (e) {
+        return c.json({ error: 'Redeem failed' }, 500);
+    }
+});
+
 api.get('/paths', auth, async (c) => {
-  const paths = db.prepare('SELECT * FROM paths').all() as any[];
-  const sessionId = webrtcManager.getFirstSessionId();
+  const payload = c.get('jwtPayload') as any;
+  const user = db.prepare('SELECT api_key, url_limit FROM users WHERE id = ?').get(payload.id) as any;
+  const paths = db.prepare('SELECT * FROM paths WHERE user_id = ?').all(payload.id) as any[];
+  const isOnline = !!webrtcManager.getSessionByApiKey(user?.api_key);
   const result = paths.map(p => ({
     ...p,
-    status: sessionId ? 'online' : 'offline' // Simple check for now
+    status: isOnline ? 'online' : 'offline'
   }));
-  return c.json(result);
+  return c.json({ paths: result, url_limit: user?.url_limit ?? 5, connected: isOnline });
 });
+
 
 api.post('/paths', auth, async (c) => {
   const body = await c.req.json();
-  const { name, port, user_id } = body;
+  const payload = c.get('jwtPayload') as any;
+  const { name, port } = body;
   
   try {
-    db.prepare('INSERT INTO paths (name, port, user_id) VALUES (?, ?, ?)').run(name, port, user_id);
+    db.prepare('INSERT INTO paths (name, port, user_id) VALUES (?, ?, ?)').run(name, port, payload.id);
     return c.json({ success: true });
   } catch (e) {
     return c.json({ error: 'Path name already exists or invalid data' }, 400);
@@ -78,9 +135,12 @@ api.post('/paths', auth, async (c) => {
 api.put('/paths/:id', auth, async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json();
+  const payload = c.get('jwtPayload') as any;
   const { name, port, is_active } = body;
   
   try {
+    const existing = db.prepare('SELECT user_id FROM paths WHERE id = ?').get(id) as any;
+    if (!existing || existing.user_id !== payload.id) return c.json({ error: 'Unauthorized' }, 403);
     db.prepare('UPDATE paths SET name = ?, port = ?, is_active = ? WHERE id = ?').run(name, port, is_active ? 1 : 0, id);
     return c.json({ success: true });
   } catch (e) {
@@ -90,7 +150,10 @@ api.put('/paths/:id', auth, async (c) => {
 
 api.delete('/paths/:id', auth, async (c) => {
   const id = c.req.param('id');
+  const payload = c.get('jwtPayload') as any;
   try {
+    const existing = db.prepare('SELECT user_id FROM paths WHERE id = ?').get(id) as any;
+    if (!existing || existing.user_id !== payload.id) return c.json({ error: 'Unauthorized' }, 403);
     db.prepare('DELETE FROM paths WHERE id = ?').run(id);
     return c.json({ success: true });
   } catch (e) {
@@ -98,25 +161,24 @@ api.delete('/paths/:id', auth, async (c) => {
   }
 });
 
-const clients = new Map<string, any>(); // Map API Key to signaling state
+const clients = new Map<string, any>(); // API Key 到信令状态的映射
 
 api.post('/webrtc/signal', async (c) => {
     try {
         const body = await c.req.json();
-        console.log('Received signal:', body.type);
+        console.log('收到信号:', body.type);
         const { api_key, sdp, type } = body;
         
-        // Verify API Key
+        // 验证 API Key
         const user = db.prepare('SELECT id FROM users WHERE api_key = ?').get(api_key);
         if (!user) return c.json({ error: 'Invalid API Key' }, 401);
 
         if (type === 'offer') {
-            console.log('--- Processing WebRTC Offer ---');
+            console.log('--- 正在处理 WebRTC Offer ---');
             const pc = new datachannel.PeerConnection("l2h-server", { iceServers: [] });
             
-            const dc = pc.createDataChannel("l2h-data");
-            dc.onMessage((msg) => console.log('DC Message:', msg));
-            dc.onOpen(() => dc.sendMessage('Hello from server!'));
+            // Register with manager to handle DataChannels
+            webrtcManager.addConnection(api_key, pc);
 
             const answerPromise = new Promise<string>((resolve, reject) => {
                 const timeout = setTimeout(() => {
@@ -125,7 +187,7 @@ api.post('/webrtc/signal', async (c) => {
                 }, 10000);
 
                 pc.onLocalDescription((sdp, type) => {
-                    console.log('Generated local description:', type);
+                    console.log('已生成本地描述:', type);
                     if (type === 'answer') {
                         clearTimeout(timeout);
                         resolve(sdp);
@@ -133,14 +195,14 @@ api.post('/webrtc/signal', async (c) => {
                 });
             });
 
-            pc.onGatheringStateChange((state) => console.log('Gathering State:', state));
-            pc.onStateChange((state) => console.log('PC State Change:', state));
+            pc.onGatheringStateChange((state) => console.log('收集状态:', state));
+            pc.onStateChange((state) => console.log('PC 状态变更:', state));
 
             try {
                 pc.setRemoteDescription(sdp, type);
-                console.log('Remote description set');
+                console.log('已设置远程描述');
             } catch (err) {
-                console.error('Failed to set remote description:', err);
+                console.error('设置远程描述失败:', err);
                 pc.close();
                 return c.json({ error: 'Invalid SDP' }, 400);
             }
@@ -148,10 +210,10 @@ api.post('/webrtc/signal', async (c) => {
             try {
                 const answerSDP = await answerPromise;
                 webrtcManager.addConnection(api_key, pc); 
-                console.log('Returning answer to client');
+                console.log('正在向客户端返回 answer');
                 return c.json({ status: 'ok', type: 'answer', sdp: answerSDP });
             } catch (err: any) {
-                console.error('Answer Generation Error:', err.message);
+                console.error('Answer 生成错误:', err.message);
                 return c.json({ error: err.message }, 500);
             }
         }
@@ -164,13 +226,13 @@ api.post('/webrtc/signal', async (c) => {
 });
 
 api.get('/user/me', (c) => {
-    // Return dummy user for now
+    // 暂时返回虚拟用户
     return c.json({ username: 'l2hadmin', role: 'admin' });
 });
 
 api.post('/user/api-key', auth, (c) => {
     const apiKey = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    // Update for the user (implementing admin only for now)
+    // 为用户更新（目前仅为管理员实现）
     db.prepare('UPDATE users SET api_key = ? WHERE role = ?').run(apiKey, 'admin');
     return c.json({ api_key: apiKey });
 });

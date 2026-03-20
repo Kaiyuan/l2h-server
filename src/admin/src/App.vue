@@ -1,16 +1,24 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { LayoutDashboard, Globe, Settings as SettingsIcon, LogOut, Menu } from 'lucide-vue-next';
+import { LayoutDashboard, Globe, Settings as SettingsIcon, LogOut, Menu, Tag } from 'lucide-vue-next';
 
 const router = useRouter();
 const visible = ref(true);
+
+const userStr = localStorage.getItem('user');
+const user = userStr ? JSON.parse(userStr) : null;
+const isAdmin = user?.role === 'admin';
 
 const menuItems = [
   { label: '仪表盘', icon: LayoutDashboard, to: '/' },
   { label: 'Path 管理', icon: Globe, to: '/paths' },
   { label: '设置', icon: SettingsIcon, to: '/settings' },
 ];
+
+if (isAdmin) {
+  menuItems.push({ label: '邀请 & 兑换', icon: Tag, to: '/codes' });
+}
 
 const logout = () => {
   localStorage.removeItem('token');

@@ -4,13 +4,13 @@ import { join } from 'path';
 const dbPath = process.env.DB_PATH || join(process.cwd(), 'l2h.db');
 const db = new Database(dbPath);
 
-// Initialize tables
+// 初始化表
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
-    role TEXT DEFAULT 'user', -- 'admin', 'user'
+    role TEXT DEFAULT 'user', -- 'admin', 'user' (角色)
     nickname TEXT,
     api_key TEXT UNIQUE,
     url_limit INTEGER DEFAULT 5,
@@ -55,7 +55,7 @@ db.exec(`
     user_id INTEGER,
     title TEXT,
     content TEXT,
-    status TEXT DEFAULT 'open', -- 'open', 'closed'
+    status TEXT DEFAULT 'open', -- 'open', 'closed' (状态)
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id)
   );
