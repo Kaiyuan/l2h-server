@@ -1,16 +1,23 @@
-import Database from 'better-sqlite3';
-import { join } from 'path';
+let dbInstance: any;
 
-const dbPath = process.env.DB_PATH || join(process.cwd(), 'l2h.db');
-const db = new Database(dbPath);
+export const initDB = (platformDB?: any) => {
+    if (platformDB) {
+        dbInstance = platformDB; // D1
+        return;
+    }
+    const Database = require('better-sqlite3');
+    const { join } = require('path');
+    const dbPath = process.env.DB_PATH || join(process.cwd(), 'l2h.db');
+    dbInstance = new Database(dbPath);
+};
 
-// 初始化表
-db.exec(`
+// 初始化表模板
+export const SCHEMA = `
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
-    role TEXT DEFAULT 'user', -- 'admin', 'user' (角色)
+    role TEXT DEFAULT 'user',
     nickname TEXT,
     api_key TEXT UNIQUE,
     url_limit INTEGER DEFAULT 5,
@@ -55,10 +62,17 @@ db.exec(`
     user_id INTEGER,
     title TEXT,
     content TEXT,
-    status TEXT DEFAULT 'open', -- 'open', 'closed' (状态)
+    status TEXT DEFAULT 'open',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id)
   );
-`);
+`;
 
-export default db;
+const proxyDB = new Proxy({} as any, {
+    get(_, prop) {
+        if (!dbInstance) initDB();
+        return dbInstance[prop];
+    }
+});
+
+export default proxyDB;

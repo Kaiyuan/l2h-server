@@ -1,37 +1,76 @@
-import * as datachannel from 'node-datachannel';
+// 定义通用接口，屏蔽 node-datachannel 和原生 WebRTC 的差异
+interface IDataChannel {
+    sendMessage(msg: string): void;
+    onMessage(cb: (msg: any) => void): void;
+    onClosed(cb: () => void): void;
+}
+
+interface IPeerConnection {
+    close(): void;
+    onDataChannel(cb: (dc: IDataChannel) => void): void;
+    onStateChange(cb: (state: string) => void): void;
+}
 
 class WebRTCManager {
-    // 映射: API Key -> PeerConnection
-    private connections = new Map<string, datachannel.PeerConnection>();
-    // 映射: API Key -> DataChannel
-    private dataChannels = new Map<string, datachannel.DataChannel>();
-    // 映射: requestId -> resolve 回调
+    private connections = new Map<string, IPeerConnection>();
+    private dataChannels = new Map<string, IDataChannel>();
     private pendingRequests = new Map<string, (response: any) => void>();
 
-    addConnection(apiKey: string, pc: datachannel.PeerConnection) {
-        // 清理过期的连接
+    addConnection(apiKey: string, pc: any) {
+        // 适配 node-datachannel 和 原生 RTCPeerConnection
+        const icedPC: IPeerConnection = this.wrapPC(pc);
+        
         const existing = this.connections.get(apiKey);
         if (existing) {
             try { existing.close(); } catch {}
         }
-        this.connections.set(apiKey, pc);
+        this.connections.set(apiKey, icedPC);
 
-        pc.onDataChannel((dc) => {
+        icedPC.onDataChannel((dc) => {
             console.log(`API Key 的 DataChannel 已打开: ${apiKey}`);
             this.handleDataChannel(apiKey, dc);
         });
 
-        pc.onStateChange((state) => {
+        icedPC.onStateChange((state) => {
             console.log(`连接状态 [${apiKey}]: ${state}`);
             if (state === 'disconnected' || state === 'failed' || state === 'closed') {
                 this.connections.delete(apiKey);
                 this.dataChannels.delete(apiKey);
-                console.log(`已移除 API Key 的会话: ${apiKey}`);
             }
         });
     }
 
-    private handleDataChannel(apiKey: string, dc: datachannel.DataChannel) {
+    private wrapPC(pc: any): IPeerConnection {
+        // 如果是 node-datachannel 对象
+        if (pc.onDataChannel && !pc.createDataChannel) {
+            return {
+                close: () => pc.close(),
+                onDataChannel: (cb) => pc.onDataChannel((dc: any) => cb({
+                    sendMessage: (msg) => dc.sendMessage(msg),
+                    onMessage: (msgCb) => dc.onMessage(msgCb),
+                    onClosed: (closeCb) => dc.onClosed(closeCb)
+                })),
+                onStateChange: (cb) => pc.onStateChange(cb)
+            };
+        }
+        // 如果是标准 RTCPeerConnection (Cloudflare)
+        return {
+            close: () => pc.close(),
+            onDataChannel: (cb) => {
+                pc.ondatachannel = (ev: any) => {
+                    const dc = ev.channel;
+                    cb({
+                        sendMessage: (msg) => dc.send(msg),
+                        onMessage: (msgCb) => dc.onmessage = (e: any) => msgCb(e.data),
+                        onClosed: (closeCb) => dc.onclose = closeCb
+                    });
+                };
+            },
+            onStateChange: (cb) => pc.onconnectionstatechange = () => cb(pc.connectionState)
+        };
+    }
+
+    private handleDataChannel(apiKey: string, dc: IDataChannel) {
         this.dataChannels.set(apiKey, dc);
         dc.onMessage((msg) => {
             try {
@@ -46,8 +85,9 @@ class WebRTCManager {
             }
         });
         dc.onClosed(() => {
-            console.log(`API Key 的 DataChannel 已关闭: ${apiKey}`);
-            this.dataChannels.delete(apiKey);
+            if (this.dataChannels.get(apiKey) === dc) {
+                this.dataChannels.delete(apiKey);
+            }
         });
     }
 
@@ -62,7 +102,6 @@ class WebRTCManager {
             this.pendingRequests.set(requestId, resolve);
             dc.sendMessage(JSON.stringify(request));
 
-            // 30 秒超时
             setTimeout(() => {
                 if (this.pendingRequests.has(requestId)) {
                     this.pendingRequests.delete(requestId);
@@ -72,24 +111,12 @@ class WebRTCManager {
         });
     }
 
-    /** 如果会话有已打开的 DataChannel，返回其 API Key */
     getSessionByApiKey(apiKey: string): string | undefined {
         return this.dataChannels.has(apiKey) ? apiKey : undefined;
     }
 
-    /** 当前活跃（DataChannel 已就绪）的会话数量 */
     getActiveSessionCount(): number {
         return this.dataChannels.size;
-    }
-
-    /** 列出所有已连接的 API Key（用于统计） */
-    getConnectedApiKeys(): string[] {
-        return Array.from(this.dataChannels.keys());
-    }
-
-    /** @deprecated use getSessionByApiKey */
-    getFirstSessionId(): string | undefined {
-        return this.dataChannels.keys().next().value;
     }
 }
 
