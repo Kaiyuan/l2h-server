@@ -1,7 +1,7 @@
 FROM node:20-bookworm-slim AS frontend-builder
 WORKDIR /app
 COPY src/admin/package*.json ./src/admin/
-RUN cd src/admin && npm ci
+RUN cd src/admin && npm ci --legacy-peer-deps
 COPY src/admin/ ./src/admin/
 RUN cd src/admin && npm run build
 
@@ -12,7 +12,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y python3 make g++ libsqlite3-dev && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
-RUN npm install
+RUN npm install --legacy-peer-deps
 
 COPY . .
 # Copy pre-built frontend
