@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "l2h-server",
-  "main": "src/index.ts",
+  "main": "dist/worker.mjs",
   "compatibility_date": "2025-01-01",
   "compatibility_flags": [
     "nodejs_compat"
@@ -9,13 +9,6 @@
   "vars": {
     "ADMIN_PATH": "dashboard"
   },
-  "rules": [
-    {
-      "type": "Text",
-      "globs": ["**/*.node"],
-      "fallthrough": true
-    }
-  ],
   "observability": {
     "enabled": true
   }
