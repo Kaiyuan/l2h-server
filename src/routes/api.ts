@@ -14,6 +14,14 @@ const auth = jwt({ secret: JWT_SECRET, alg: 'HS256' });
 
 api.get('/ping', (c) => c.json({ status: 'ok', time: new Date() }));
 
+// 获取 WebRTC 公共配置 (供客户端连接前调用)
+api.get('/webrtc/config', (c) => {
+    const servers = db.prepare('SELECT value FROM settings WHERE key = ?').get('webrtc_servers') as any;
+    return c.json({
+        iceServers: servers ? JSON.parse(servers.value) : ["stun:stun.cloudflare.com:3478"]
+    });
+});
+
 const loginSchema = z.object({
   username: z.string(),
   password: z.string(),
