@@ -9,6 +9,13 @@
   "vars": {
     "ADMIN_PATH": "dashboard"
   },
+  "rules": [
+    {
+      "type": "Text",
+      "globs": ["**/*.node"],
+      "fallthrough": true
+    }
+  ],
   "observability": {
     "enabled": true
   }
