@@ -9,13 +9,6 @@
   "vars": {
     "ADMIN_PATH": "dashboard"
   },
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "l2h-db",
-      "database_id": "REPLACE_WITH_YOUR_D1_ID"
-    }
-  ],
   "observability": {
     "enabled": true
   }
