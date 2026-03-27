@@ -5,7 +5,7 @@ import { cors } from 'hono/cors';
 import * as config from './config.js';
 import { api } from './routes/api.js';
 import { admin } from './routes/admin.js';
-import db from './db/index.js';
+import db, { initDB } from './db/index.js';
 import { webrtcManager } from './webrtc/manager.js';
 
 const app = new Hono();
@@ -14,6 +14,16 @@ app.use('*', cors());
 
 // 检查环境：Node (Docker) 还是 Worker (Cloudflare)
 const isNode = typeof process !== 'undefined' && process.release && process.release.name === 'node';
+
+// Cloudflare 环境：每个请求前注入 D1 数据库实例
+if (!isNode) {
+  app.use('*', async (c: any, next) => {
+    if (c.env?.DB) {
+      initDB(c.env.DB);
+    }
+    await next();
+  });
+}
 
 // 中间件：透传反代后的真实客户端 IP
 app.use('*', async (c, next) => {

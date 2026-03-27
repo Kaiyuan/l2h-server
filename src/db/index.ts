@@ -25,33 +25,17 @@ if (isNode) {
 export const initDB = (platformDB?: any) => {
     if (platformDB) {
         dbInstance = platformDB; // D1
+        // D1 不需要手动建表，由 Cloudflare D1 migrations 管理
         return;
     }
-    // If running in Node.js and db is already initialized by the environment check
     if (isNode && db) {
         dbInstance = db;
-    } else {
-        // Fallback or specific initialization if needed, though the global `db` should handle Node.js
-        // For Cloudflare, dbInstance will be set via platformDB argument
-        // This part might need adjustment based on how `dbInstance` is ultimately used
-        // For now, if not platformDB and not Node, it means `db` is null, so `dbInstance` remains undefined
-        // or we could throw an error if dbInstance is expected to be set here.
-        // Given the original code, it seems `dbInstance` was always set here for Node.js.
-        // Let's ensure it's set if `isNode` is true and `db` was initialized.
-        if (isNode) {
-            dbInstance = db;
-        } else {
-            // This case implies a non-Node environment without platformDB provided.
-            // The original code would have failed here.
-            // For Cloudflare, `platformDB` (D1) is expected.
-            throw new Error("Database not initialized. Provide platformDB for Worker environment or ensure Node.js setup is correct.");
+        // 本地 SQLite 需要初始化 schema
+        if (typeof dbInstance.exec === 'function') {
+            dbInstance.exec(SCHEMA);
         }
     }
-
-    // Ensure schema is applied if dbInstance is a better-sqlite3 instance
-    if (dbInstance && typeof dbInstance.exec === 'function') {
-        dbInstance.exec(SCHEMA);
-    }
+    // Cloudflare 环境下，dbInstance 由每个请求前的中间件通过 c.env.DB 注入
 };
 
 // 初始化表模板
