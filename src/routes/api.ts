@@ -190,6 +190,13 @@ api.post('/webrtc/signal', async (c) => {
 
         if (type === 'offer') {
             console.log('--- 正在处理 WebRTC Offer ---');
+            
+            if (!datachannel) {
+                return c.json({ 
+                    error: 'Cloudflare Workers 不直接支持运行 WebRTC 节点。请将 l2h-server 部署在 Node.js (Docker/Native) 环境中以处理流量映射。' 
+                }, 501);
+            }
+
             // 添加 Google 公共 STUN 服务器以协助发现网络路径
             const pc = new datachannel.PeerConnection("l2h-server", { 
                 iceServers: ["stun:stun.l.google.com:19302"] 
