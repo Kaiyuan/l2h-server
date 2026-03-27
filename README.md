@@ -10,41 +10,43 @@ l2h-server 是 l2h 系统的中央信令与网关服务器。它负责管理 Web
 - **多用户隔离**：基于 API Key 的安全隔离机制，确保数据隐私。
 - **多平台支持**：支持 Docker (x86/ARM) 及 CloudFlare Pages 部署。
 
-## 快速开始
+## 🚀 部署指南
 
-### 1. 一键脚本手动安装
+### 1. Docker 部署 (最推荐)
 
-在您的 Linux 服务器上运行：
+这是最简单、最稳健的部署方式，尤其是对于 NAS、VPS 等环境。
 
+#### 快速启动
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Kaiyuan/l2h-server/main/install.sh | bash
+docker run -d \
+  --name l2h-server \
+  -p 52331:52331 \
+  -e ADMIN_USER=l2hadmin \
+  -e ADMIN_PASSWORD=l2hpassword \
+  -v ./data:/app/data \
+  -e DB_PATH=/app/data/l2h.db \
+  kaiyuan/l2h-server:latest
 ```
 
-### 2. Docker Compose 手动部署
+#### 关键配置参数 (Environment Variables)
+- `ADMIN_USER`: 第一次启动时自动创建的管理员用户名。
+- `ADMIN_PASSWORD`: 第一次启动时自动创建的管理员密码 (环境变量设定后无需手动初始化)。
+- `JWT_SECRET`: 签名令牌的私钥 (建议设置一个长随机字符串)。
+- `PORT`: 服务监听端口 (默认 52331)。
+- `DB_PATH`: 数据库文件存储路径 (建议挂载宿主机目录 `/app/data/l2h.db` 以实现持久化)。
 
-创建 `docker-compose.yml`：
+#### ⚡ WebRTC 网络优化 (重要)
+如果您的服务端处于复杂的局域网或内网环境下，建议使用 **`host` 网络模式** 以获得最佳的 WebRTC 穿透成功率：
+```bash
+docker run -d --name l2h-server --net=host \
+  -e ADMIN_USER=admin -e ADMIN_PASSWORD=password \
+  kaiyuan/l2h-server:latest
+```
 
-```yaml
-version: "3.8"
-services:
-  l2h-server:
-    image: ghcr.io/kaiyuan/l2h-server:latest
-    container_name: l2h-server
-    ports:
-      - "52331:52331"
-    volumes:
-      - ./data:/app/data
-    environment:
-      - DB_PATH=/app/data/l2h.db
-      - JWT_SECRET=YOUR_RANDOM_SECRET
-    restart: unless-stopped
-```
-使用 Docker 和 CloudFlare Pages 部署使用可以设置常量
-```
-ADMIN_PATH=dashboard
-ADMIN_USER=l2hadmin
-ADMIN_PASSWORD=l2hpassword
-```
+---
+
+### 2. 管理后台访问
+访问 `http://YOUR_IP:52331/dashboard/` 即可进入管理后台。首次登录后，您可以在后台设置中配置自定义的 STUN/TURN 服务器以增强连通性。
 
 ### 3. Cloudflare Pages 部署 (D1 数据库)
 
