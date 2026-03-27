@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "l2h-server",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-04-01",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "vars": {
+    "ADMIN_PATH": "dashboard"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "l2h-db",
+      "database_id": "REPLACE_WITH_YOUR_D1_ID"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
