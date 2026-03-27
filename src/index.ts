@@ -30,6 +30,10 @@ app.use('*', setupMiddleware);
 app.route('/api', api);
 app.route('/admin-api', admin);
 
+// 仪表盘后台静态文件服务
+app.use('/dashboard/*', serveStatic({ root: './src/admin/dist' }));
+app.get('/dashboard', (c) => c.redirect('/dashboard/'));
+
 // 网关逻辑导出供 Worker 使用
 export const gateway = new Hono();
 gateway.all('*', async (c) => {
