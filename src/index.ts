@@ -80,11 +80,40 @@ gateway.all('*', async (c) => {
     }
 });
 
+// 其他路由 (setup, etc.)
+app.get('/setup', (c) => {
+  const adminUser = db.prepare('SELECT * FROM users WHERE role = ?').get('admin');
+  if (adminUser) return c.redirect('/dashboard/');
+  return c.html(`
+    <h1>初始化管理员</h1>
+    <form method="POST" action="/setup">
+      <input name="username" placeholder="Username" required /><br/>
+      <input name="password" type="password" placeholder="Password" required /><br/>
+      <button type="submit">创建管理员</button>
+    </form>
+  `);
+});
+
+app.post('/setup', async (c) => {
+  const body = await c.req.parseBody();
+  const { username, password } = body as any;
+  db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)').run(username, password, 'admin');
+  return c.redirect('/dashboard/');
+});
+
+// 自动从环境变量初始化管理员 (如果设置)
+const ADMIN_USER = process.env.ADMIN_USER;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+if (ADMIN_USER && ADMIN_PASSWORD) {
+  const exists = db.prepare('SELECT id FROM users WHERE username = ?').get(ADMIN_USER);
+  if (!exists) {
+    db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)').run(ADMIN_USER, ADMIN_PASSWORD, 'admin');
+    console.log(`已从环境变量自动创建管理员: ${ADMIN_USER}`);
+  }
+}
+
 app.route('/', gateway);
 
-// 其他路由 (setup, etc.)
-app.get('/setup', (c) => c.html('<h1>Setup Admin</h1>...')); 
-// ... 其他逻辑 ...
 
 export default app;
 

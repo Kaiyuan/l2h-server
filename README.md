@@ -39,6 +39,12 @@ services:
       - JWT_SECRET=YOUR_RANDOM_SECRET
     restart: unless-stopped
 ```
+使用 Docker 和 CloudFlare Pages 部署使用可以设置常量
+```
+ADMIN_PATH=dashboard
+ADMIN_USER=l2hadmin
+ADMIN_PASSWORD=l2hpassword
+```
 
 ### 3. Cloudflare Pages 部署 (D1 数据库)
 
