@@ -68,9 +68,13 @@ app.get('/dashboard', (c) => c.redirect('/dashboard/'));
 
 // 网关逻辑导出供 Worker 使用
 export const gateway = new Hono();
-gateway.all('*', async (c) => {
+gateway.all('*', async (c, next) => {
     const pathName = c.req.path.split('/')[1];
-    if (!pathName) return c.notFound();
+    // 如果是系统保留路径，跳过网关逻辑，交给后续路由或静态资源
+    const reserved = ['api', 'admin-api', 'dashboard', 'setup', 'favicon.ico'];
+    if (!pathName || reserved.includes(pathName)) {
+        return await next!();
+    }
 
     const mapping = await db.prepare(
             `SELECT p.port, p.user_id, u.api_key
@@ -78,7 +82,7 @@ gateway.all('*', async (c) => {
          WHERE p.name = ? AND p.is_active = 1`
         ).get(pathName) as any;
 
-    if (!mapping) return c.notFound();
+    if (!mapping) return await next();
 
     const sessionId = webrtcManager.getSessionByApiKey(mapping.api_key);
     if (!sessionId) return c.text(`主机未连接`, 503);
@@ -159,6 +163,16 @@ if (isNode) {
 
 app.route('/', gateway);
 
+
+// Cloudflare 环境下的静态资源兜底
+if (!isNode) {
+    app.notFound(async (c: any) => {
+        if (c.env?.ASSETS) {
+            return await c.env.ASSETS.fetch(c.req.raw);
+        }
+        return c.text('Not Found', 404);
+    });
+}
 
 export default app;
 
