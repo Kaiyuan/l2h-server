@@ -6,7 +6,9 @@
     "dev": "tsx src/index.ts",
     "build": "tsx build.ts",
     "build:worker": "node build-worker.mjs",
-    "deploy": "npm run build:worker && wrangler deploy",
+    "build:admin": "cd src/admin && npm install && npm run build",
+    "build:all": "npm run build:admin && npm run build:worker",
+    "deploy": "npm run build:all && wrangler deploy",
     "test": "vitest"
   },
   "keywords": [],

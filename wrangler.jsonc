@@ -7,7 +7,7 @@
     "nodejs_compat"
   ],
   "build": {
-    "command": "node build-worker.mjs"
+    "command": "npm run build:all"
   },
   "vars": {
     "ADMIN_PATH": "dashboard"
