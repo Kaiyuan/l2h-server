@@ -22,7 +22,9 @@ if (isNode) {
     db = null;
 }
 
-export const initDB = (platformDB?: any) => {
+let d1Initialized = false;
+
+export const initDB = async (platformDB?: any) => {
     if (platformDB) {
         // Wrapper mapping standard sqlite3/better-sqlite3 methods to Cloudflare D1
         dbInstance = {
@@ -49,7 +51,11 @@ export const initDB = (platformDB?: any) => {
                 };
             }
         };
-        // D1 不需要手动建表，由 Cloudflare D1 migrations 管理
+        
+        if (!d1Initialized) {
+            await platformDB.exec(SCHEMA).catch((e: any) => console.error('D1 init error', e));
+            d1Initialized = true;
+        }
         return;
     }
     if (isNode && db) {
@@ -121,7 +127,7 @@ export const SCHEMA = `
 
 const proxyDB = new Proxy({} as any, {
     get(_, prop) {
-        if (!dbInstance) initDB(); // Try to default-initialize for Node
+        if (!dbInstance && isNode) initDB(); // Try to default-initialize for Node
         if (!dbInstance) {
             console.error("Database not initialized! On Cloudflare, ensure c.env.DB is bound and injected via middleware.");
             return () => { throw new Error("Database not initialized"); };

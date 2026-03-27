@@ -19,7 +19,7 @@ const isNode = typeof process !== 'undefined' && process.release && process.rele
 if (!isNode) {
   app.use('*', async (c: any, next) => {
     if (c.env?.DB) {
-      initDB(c.env.DB);
+      await initDB(c.env.DB);
     }
     await next();
   });
