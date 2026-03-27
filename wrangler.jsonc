@@ -12,6 +12,10 @@
   "vars": {
     "ADMIN_PATH": "dashboard"
   },
+  "assets": {
+    "directory": "./src/admin/dist/",
+    "binding": "ASSETS"
+  },
   "d1_databases": [
     {
       "binding": "DB",
