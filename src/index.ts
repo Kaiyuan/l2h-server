@@ -168,7 +168,16 @@ app.route('/', gateway);
 if (!isNode) {
     app.notFound(async (c: any) => {
         if (c.env?.ASSETS) {
-            return await c.env.ASSETS.fetch(c.req.raw);
+            const url = new URL(c.req.url);
+            // 由于 Dashboard 静态文件打包在 src/admin/dist 根目录下，
+            // 访问 /dashboard/* 时需要移除路径前缀才能找到对应的资源
+            if (url.pathname.startsWith('/dashboard/')) {
+                url.pathname = url.pathname.replace('/dashboard/', '/');
+            } else if (url.pathname === '/dashboard') {
+                url.pathname = '/';
+            }
+            // 复制原请求的 Headers 等信息并应用新 URL
+            return await c.env.ASSETS.fetch(new Request(url.toString(), c.req.raw));
         }
         return c.text('Not Found', 404);
     });
