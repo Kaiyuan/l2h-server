@@ -123,26 +123,28 @@ app.post('/setup', async (c) => {
   return c.redirect('/dashboard/');
 });
 
-// 自动从环境变量初始化管理员 (如果设置)
-const ADMIN_USER = process.env.ADMIN_USER;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-if (ADMIN_USER && ADMIN_PASSWORD) {
-  const exists = db.prepare('SELECT id FROM users WHERE username = ?').get(ADMIN_USER);
-  if (!exists) {
-    db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)').run(ADMIN_USER, ADMIN_PASSWORD, 'admin');
-    console.log(`已从环境变量自动创建管理员: ${ADMIN_USER}`);
+// 自动从环境变量初始化管理员 (仅 Node 环境在启动时执行)
+if (isNode) {
+  const ADMIN_USER = process.env.ADMIN_USER;
+  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+  if (ADMIN_USER && ADMIN_PASSWORD) {
+    const exists = db.prepare('SELECT id FROM users WHERE username = ?').get(ADMIN_USER);
+    if (!exists) {
+      db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)').run(ADMIN_USER, ADMIN_PASSWORD, 'admin');
+      console.log(`已从环境变量自动创建管理员: ${ADMIN_USER}`);
+    }
   }
-}
 
-// 初始化默认 WebRTC 服务器配置 (Cloudflare)
-const defaultIceServers = JSON.stringify([
+  // 初始化默认 WebRTC 服务器配置
+  const defaultIceServers = JSON.stringify([
     "stun:stun.cloudflare.com:3478",
     "stun:stun.l.google.com:19302",
     "stun:stun1.l.google.com:19302"
-]);
-const iceConfig = db.prepare('SELECT value FROM settings WHERE key = ?').get('webrtc_servers');
-if (!iceConfig) {
+  ]);
+  const iceConfig = db.prepare('SELECT value FROM settings WHERE key = ?').get('webrtc_servers');
+  if (!iceConfig) {
     db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('webrtc_servers', defaultIceServers);
+  }
 }
 
 app.route('/', gateway);
