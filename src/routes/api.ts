@@ -22,8 +22,8 @@ const auth = jwt({ secret: JWT_SECRET, alg: 'HS256' });
 api.get('/ping', (c) => c.json({ status: 'ok', time: new Date() }));
 
 // 获取 WebRTC 公共配置 (供客户端连接前调用)
-api.get('/webrtc/config', (c) => {
-    const servers = db.prepare('SELECT value FROM settings WHERE key = ?').get('webrtc_servers') as any;
+api.get('/webrtc/config', async (c) => {
+    const servers = await db.prepare('SELECT value FROM settings WHERE key = ?').get('webrtc_servers') as any;
     return c.json({
         iceServers: servers ? JSON.parse(servers.value) : ["stun:stun.cloudflare.com:3478"]
     });
@@ -40,7 +40,7 @@ api.post('/login', async (c) => {
   if (!result.success) return c.json({ error: 'Invalid input' }, 400);
 
   const { username, password } = result.data;
-  const user = db.prepare('SELECT * FROM users WHERE username = ? AND password = ?').get(username, password) as { id: number, username: string, role: string, api_key: string } | undefined;
+  const user = await db.prepare('SELECT * FROM users WHERE username = ? AND password = ?').get(username, password) as { id: number, username: string, role: string, api_key: string } | undefined;
 
   if (!user) {
     return c.json({ error: 'Invalid credentials' }, 401);
@@ -73,33 +73,33 @@ api.post('/register', async (c) => {
 
   const { username, password, invitation_code } = result.data;
   
-  const invite = db.prepare('SELECT id, expires_at FROM invitations WHERE code = ?').get(invitation_code) as any;
+  const invite = await db.prepare('SELECT id, expires_at FROM invitations WHERE code = ?').get(invitation_code) as any;
   if (!invite) return c.json({ error: 'Invalid or expired invitation code' }, 400);
   
   if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
-    db.prepare('DELETE FROM invitations WHERE id = ?').run(invite.id);
+    await db.prepare('DELETE FROM invitations WHERE id = ?').run(invite.id);
     return c.json({ error: 'Invitation code has expired' }, 400);
   }
 
-  const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  const existing = await db.prepare('SELECT id FROM users WHERE username = ?').get(username);
   if (existing) return c.json({ error: 'Username already exists' }, 400);
 
   const api_key = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
   try {
-    db.prepare('INSERT INTO users (username, password, api_key) VALUES (?, ?, ?)').run(username, password, api_key);
-    db.prepare('DELETE FROM invitations WHERE id = ?').run(invite.id);
+    await db.prepare('INSERT INTO users (username, password, api_key) VALUES (?, ?, ?)').run(username, password, api_key);
+    await db.prepare('DELETE FROM invitations WHERE id = ?').run(invite.id);
     return c.json({ success: true });
   } catch (e) {
     return c.json({ error: 'Registration failed' }, 500);
   }
 });
 
-api.get('/user/me', auth, (c) => {
+api.get('/user/me', auth, async (c) => {
     const payload = c.get('jwtPayload') as { id: number; username: string; role: string };
     if (!payload) return c.json({ error: 'Unauthorized' }, 401);
     
-    const user = db.prepare('SELECT id, username, role, api_key, url_limit FROM users WHERE id = ?').get(payload.id) as any;
+    const user = await db.prepare('SELECT id, username, role, api_key, url_limit FROM users WHERE id = ?').get(payload.id) as any;
     return c.json(user);
 });
 
@@ -108,13 +108,13 @@ api.post('/user/redeem', auth, async (c) => {
     const body = await c.req.json();
     const { code } = body;
 
-    const coupon = db.prepare('SELECT id, used_by FROM coupons WHERE code = ?').get(code) as any;
+    const coupon = await db.prepare('SELECT id, used_by FROM coupons WHERE code = ?').get(code) as any;
     if (!coupon) return c.json({ error: 'Invalid coupon code' }, 400);
     if (coupon.used_by) return c.json({ error: 'Coupon already used' }, 400);
 
     try {
-        db.prepare('UPDATE coupons SET used_by = ? WHERE id = ?').run(payload.username, coupon.id);
-        db.prepare('UPDATE users SET url_limit = url_limit + 5 WHERE id = ?').run(payload.id);
+        await db.prepare('UPDATE coupons SET used_by = ? WHERE id = ?').run(payload.username, coupon.id);
+        await db.prepare('UPDATE users SET url_limit = url_limit + 5 WHERE id = ?').run(payload.id);
         return c.json({ success: true, message: 'Added 5 to URL limit' });
     } catch (e) {
         return c.json({ error: 'Redeem failed' }, 500);
@@ -123,8 +123,8 @@ api.post('/user/redeem', auth, async (c) => {
 
 api.get('/paths', auth, async (c) => {
   const payload = c.get('jwtPayload') as any;
-  const user = db.prepare('SELECT api_key, url_limit FROM users WHERE id = ?').get(payload.id) as any;
-  const paths = db.prepare('SELECT * FROM paths WHERE user_id = ?').all(payload.id) as any[];
+  const user = await db.prepare('SELECT api_key, url_limit FROM users WHERE id = ?').get(payload.id) as any;
+  const paths = await db.prepare('SELECT * FROM paths WHERE user_id = ?').all(payload.id) as any[];
   const isOnline = !!webrtcManager.getSessionByApiKey(user?.api_key);
   const result = paths.map(p => ({
     ...p,
@@ -140,7 +140,7 @@ api.post('/paths', auth, async (c) => {
   const { name, port } = body;
   
   try {
-    db.prepare('INSERT INTO paths (name, port, user_id) VALUES (?, ?, ?)').run(name, port, payload.id);
+    await db.prepare('INSERT INTO paths (name, port, user_id) VALUES (?, ?, ?)').run(name, port, payload.id);
     return c.json({ success: true });
   } catch (e) {
     return c.json({ error: 'Path name already exists or invalid data' }, 400);
@@ -154,9 +154,9 @@ api.put('/paths/:id', auth, async (c) => {
   const { name, port, is_active } = body;
   
   try {
-    const existing = db.prepare('SELECT user_id FROM paths WHERE id = ?').get(id) as any;
+    const existing = await db.prepare('SELECT user_id FROM paths WHERE id = ?').get(id) as any;
     if (!existing || existing.user_id !== payload.id) return c.json({ error: 'Unauthorized' }, 403);
-    db.prepare('UPDATE paths SET name = ?, port = ?, is_active = ? WHERE id = ?').run(name, port, is_active ? 1 : 0, id);
+    await db.prepare('UPDATE paths SET name = ?, port = ?, is_active = ? WHERE id = ?').run(name, port, is_active ? 1 : 0, id);
     return c.json({ success: true });
   } catch (e) {
     return c.json({ error: 'Update failed' }, 400);
@@ -167,9 +167,9 @@ api.delete('/paths/:id', auth, async (c) => {
   const id = c.req.param('id');
   const payload = c.get('jwtPayload') as any;
   try {
-    const existing = db.prepare('SELECT user_id FROM paths WHERE id = ?').get(id) as any;
+    const existing = await db.prepare('SELECT user_id FROM paths WHERE id = ?').get(id) as any;
     if (!existing || existing.user_id !== payload.id) return c.json({ error: 'Unauthorized' }, 403);
-    db.prepare('DELETE FROM paths WHERE id = ?').run(id);
+    await db.prepare('DELETE FROM paths WHERE id = ?').run(id);
     return c.json({ success: true });
   } catch (e) {
     return c.json({ error: 'Delete failed' }, 400);
@@ -185,7 +185,7 @@ api.post('/webrtc/signal', async (c) => {
         const { api_key, sdp, type } = body;
         
         // 验证 API Key
-        const user = db.prepare('SELECT id FROM users WHERE api_key = ?').get(api_key);
+        const user = await db.prepare('SELECT id FROM users WHERE api_key = ?').get(api_key);
         if (!user) return c.json({ error: 'Invalid API Key' }, 401);
 
         if (type === 'offer') {
@@ -248,10 +248,10 @@ api.get('/user/me', (c) => {
     return c.json({ username: 'l2hadmin', role: 'admin' });
 });
 
-api.post('/user/api-key', auth, (c) => {
+api.post('/user/api-key', auth, async (c) => {
     const apiKey = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
     // 为用户更新（目前仅为管理员实现）
-    db.prepare('UPDATE users SET api_key = ? WHERE role = ?').run(apiKey, 'admin');
+    await db.prepare('UPDATE users SET api_key = ? WHERE role = ?').run(apiKey, 'admin');
     return c.json({ api_key: apiKey });
 });
 
@@ -259,11 +259,11 @@ api.post('/user/update-password', auth, async (c) => {
     const payload = c.get('jwtPayload') as { id: number };
     const { oldPassword, newPassword } = await c.req.json();
     
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(payload.id) as any;
+    const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(payload.id) as any;
     if (user.password !== oldPassword) {
         return c.json({ error: '旧密码不正确' }, 400);
     }
     
-    db.prepare('UPDATE users SET password = ? WHERE id = ?').run(newPassword, payload.id);
+    await db.prepare('UPDATE users SET password = ? WHERE id = ?').run(newPassword, payload.id);
     return c.json({ success: true });
 });

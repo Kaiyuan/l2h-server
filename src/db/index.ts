@@ -24,7 +24,31 @@ if (isNode) {
 
 export const initDB = (platformDB?: any) => {
     if (platformDB) {
-        dbInstance = platformDB; // D1
+        // Wrapper mapping standard sqlite3/better-sqlite3 methods to Cloudflare D1
+        dbInstance = {
+            prepare: (q: string) => {
+                const stmt = platformDB.prepare(q);
+                return {
+                    get: async (...args: any[]) => {
+                        return await stmt.bind(...args).first();
+                    },
+                    all: async (...args: any[]) => {
+                        const { results } = await stmt.bind(...args).all();
+                        return results;
+                    },
+                    run: async (...args: any[]) => {
+                        const res = await stmt.bind(...args).run();
+                        return { changes: res.meta?.changes || 0, lastInsertRowid: res.meta?.last_row_id || 0 };
+                    }
+                };
+            },
+            transaction: (fn: any) => {
+                // Fake transaction wrapper for D1
+                return async (d: any) => {
+                    return await fn(d);
+                };
+            }
+        };
         // D1 不需要手动建表，由 Cloudflare D1 migrations 管理
         return;
     }
@@ -97,8 +121,15 @@ export const SCHEMA = `
 
 const proxyDB = new Proxy({} as any, {
     get(_, prop) {
-        if (!dbInstance) initDB();
-        return dbInstance[prop];
+        if (!dbInstance) initDB(); // Try to default-initialize for Node
+        if (!dbInstance) {
+            console.error("Database not initialized! On Cloudflare, ensure c.env.DB is bound and injected via middleware.");
+            return () => { throw new Error("Database not initialized"); };
+        }
+        
+        // Return property, bounding methods correctly
+        const val = dbInstance[prop];
+        return typeof val === 'function' ? val.bind(dbInstance) : val;
     }
 });
 

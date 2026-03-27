@@ -9,22 +9,22 @@ export const admin = new Hono();
 admin.use('*', jwt({ secret: config.JWT_SECRET, alg: 'HS256' }));
 
 // 这里的全部路由都应受管理员角色中间件保护（待添加）
-admin.get('/stats', (c) => {
+admin.get('/stats', async (c) => {
     const stats = {
-        total_users: (db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number }).count,
-        total_paths: (db.prepare('SELECT COUNT(*) as count FROM paths').get() as { count: number }).count,
+        total_users: (await db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number }).count,
+        total_paths: (await db.prepare('SELECT COUNT(*) as count FROM paths').get() as { count: number }).count,
         active_sessions: webrtcManager.getActiveSessionCount(),
     };
     return c.json(stats);
 });
 
-admin.get('/users', (c) => {
-    const users = db.prepare('SELECT * FROM users').all();
+admin.get('/users', async (c) => {
+    const users = await db.prepare('SELECT * FROM users').all();
     return c.json(users);
 });
 
-admin.get('/settings', (c) => {
-    const settings = db.prepare('SELECT * FROM settings').all();
+admin.get('/settings', async (c) => {
+    const settings = await db.prepare('SELECT * FROM settings').all();
     const configObj = settings.reduce((acc: any, cur: any) => {
         acc[cur.key] = cur.value;
         return acc;
@@ -45,26 +45,26 @@ admin.post('/settings', async (c) => {
 });
 
 // 邀请码
-admin.get('/invitations', (c) => {
-    const invitations = db.prepare('SELECT * FROM invitations').all();
+admin.get('/invitations', async (c) => {
+    const invitations = await db.prepare('SELECT * FROM invitations').all();
     return c.json(invitations);
 });
 
 admin.post('/invitations', async (c) => {
     const code = Math.random().toString(36).substring(2, 10).toUpperCase();
-    db.prepare('INSERT INTO invitations (code) VALUES (?)').run(code);
+    await db.prepare('INSERT INTO invitations (code) VALUES (?)').run(code);
     return c.json({ success: true, code });
 });
 
 admin.delete('/invitations/:id', async (c) => {
     const id = c.req.param('id');
-    db.prepare('DELETE FROM invitations WHERE id = ?').run(id);
+    await db.prepare('DELETE FROM invitations WHERE id = ?').run(id);
     return c.json({ success: true });
 });
 
 // 兑换码
-admin.get('/coupons', (c) => {
-    const coupons = db.prepare('SELECT * FROM coupons').all();
+admin.get('/coupons', async (c) => {
+    const coupons = await db.prepare('SELECT * FROM coupons').all();
     return c.json(coupons);
 });
 
@@ -72,12 +72,12 @@ admin.post('/coupons', async (c) => {
     const body = await c.req.json();
     const code = Math.random().toString(36).substring(2, 12).toUpperCase();
     const memo = body.memo || '';
-    db.prepare('INSERT INTO coupons (code, memo) VALUES (?, ?)').run(code, memo);
+    await db.prepare('INSERT INTO coupons (code, memo) VALUES (?, ?)').run(code, memo);
     return c.json({ success: true, code });
 });
 
 admin.delete('/coupons/:id', async (c) => {
     const id = c.req.param('id');
-    db.prepare('DELETE FROM coupons WHERE id = ?').run(id);
+    await db.prepare('DELETE FROM coupons WHERE id = ?').run(id);
     return c.json({ success: true });
 });

@@ -50,7 +50,7 @@ app.get('/dashboard', (c) => c.redirect('/dashboard/'));
 
 // 中间件：检查管理员是否已初始化
 const setupMiddleware = async (c: any, next: any) => {
-  const adminUser = db.prepare('SELECT * FROM users WHERE role = ?').get('admin');
+  const adminUser = await db.prepare('SELECT * FROM users WHERE role = ?').get('admin');
   const path = c.req.path;
   if (!adminUser && !path.startsWith('/setup') && !path.startsWith('/api/setup') && !path.startsWith('/api/webrtc')) {
     return c.redirect('/setup');
@@ -72,11 +72,11 @@ gateway.all('*', async (c) => {
     const pathName = c.req.path.split('/')[1];
     if (!pathName) return c.notFound();
 
-    const mapping = db.prepare(
-        `SELECT p.port, p.user_id, u.api_key
+    const mapping = await db.prepare(
+            `SELECT p.port, p.user_id, u.api_key
          FROM paths p JOIN users u ON p.user_id = u.id
          WHERE p.name = ? AND p.is_active = 1`
-    ).get(pathName) as any;
+        ).get(pathName) as any;
 
     if (!mapping) return c.notFound();
 
@@ -113,8 +113,8 @@ gateway.all('*', async (c) => {
 });
 
 // 其他路由 (setup, etc.)
-app.get('/setup', (c) => {
-  const adminUser = db.prepare('SELECT * FROM users WHERE role = ?').get('admin');
+app.get('/setup', async (c) => {
+  const adminUser = await db.prepare('SELECT * FROM users WHERE role = ?').get('admin');
   if (adminUser) return c.redirect('/dashboard/');
   return c.html(`
     <h1>初始化管理员</h1>
@@ -129,7 +129,7 @@ app.get('/setup', (c) => {
 app.post('/setup', async (c) => {
   const body = await c.req.parseBody();
   const { username, password } = body as any;
-  db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)').run(username, password, 'admin');
+  await db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)').run(username, password, 'admin');
   return c.redirect('/dashboard/');
 });
 
@@ -138,9 +138,9 @@ if (isNode) {
   const ADMIN_USER = process.env.ADMIN_USER;
   const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
   if (ADMIN_USER && ADMIN_PASSWORD) {
-    const exists = db.prepare('SELECT id FROM users WHERE username = ?').get(ADMIN_USER);
+    const exists = await db.prepare('SELECT id FROM users WHERE username = ?').get(ADMIN_USER);
     if (!exists) {
-      db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)').run(ADMIN_USER, ADMIN_PASSWORD, 'admin');
+      await db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)').run(ADMIN_USER, ADMIN_PASSWORD, 'admin');
       console.log(`已从环境变量自动创建管理员: ${ADMIN_USER}`);
     }
   }
@@ -151,9 +151,9 @@ if (isNode) {
     "stun:stun.l.google.com:19302",
     "stun:stun1.l.google.com:19302"
   ]);
-  const iceConfig = db.prepare('SELECT value FROM settings WHERE key = ?').get('webrtc_servers');
+  const iceConfig = await db.prepare('SELECT value FROM settings WHERE key = ?').get('webrtc_servers');
   if (!iceConfig) {
-    db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('webrtc_servers', defaultIceServers);
+    await db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('webrtc_servers', defaultIceServers);
   }
 }
 
