@@ -6,6 +6,9 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
+  "build": {
+    "command": "node build-worker.mjs"
+  },
   "vars": {
     "ADMIN_PATH": "dashboard"
   },
