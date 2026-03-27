@@ -1,10 +1,17 @@
 import { Hono } from 'hono';
 import db from '../db/index.js';
 import { z } from 'zod';
-import * as datachannel from 'node-datachannel';
-import { webrtcManager } from '../webrtc/manager.js';
 import { sign, jwt } from 'hono/jwt';
 import * as config from '../config.js';
+
+// node-datachannel 和 webrtcManager 只在 Node 环境下加载
+const isNode = typeof process !== 'undefined' && process.release && process.release.name === 'node';
+let datachannel: any = null;
+let webrtcManager: any = null;
+if (isNode) {
+    datachannel = require('node-datachannel');
+    webrtcManager = require('../webrtc/manager.js').webrtcManager;
+}
 
 const JWT_SECRET = config.JWT_SECRET;
 
