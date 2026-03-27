@@ -175,7 +175,10 @@ api.post('/webrtc/signal', async (c) => {
 
         if (type === 'offer') {
             console.log('--- 正在处理 WebRTC Offer ---');
-            const pc = new datachannel.PeerConnection("l2h-server", { iceServers: [] });
+            // 添加 Google 公共 STUN 服务器以协助发现网络路径
+            const pc = new datachannel.PeerConnection("l2h-server", { 
+                iceServers: ["stun:stun.l.google.com:19302"] 
+            });
             
             // Register with manager to handle DataChannels
             webrtcManager.addConnection(api_key, pc);
