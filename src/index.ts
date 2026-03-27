@@ -2,7 +2,6 @@ import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { logger } from 'hono/logger';
 import { cors } from 'hono/cors';
-import { serve } from '@hono/node-server';
 import * as config from './config.js';
 import { api } from './routes/api.js';
 import { admin } from './routes/admin.js';
@@ -152,9 +151,13 @@ app.route('/', gateway);
 export default app;
 
 // 如果在 Node 环境下运行
-if (typeof process !== 'undefined' && process.release?.name === 'node') {
-    const { serve } = require('@hono/node-server');
-    const DEFAULT_PORT = config.PORT || 52331;
-    console.log(`Node.js 服务器启动: http://localhost:${DEFAULT_PORT}`);
-    serve({ fetch: app.fetch, port: DEFAULT_PORT as any });
+if (isNode) {
+    try {
+        const { serve } = require('@hono/node-server');
+        const DEFAULT_PORT = config.PORT || 52331;
+        console.log(`Node.js 服务器启动: http://localhost:${DEFAULT_PORT}`);
+        serve({ fetch: app.fetch, port: DEFAULT_PORT as any });
+    } catch (e) {
+        // 在某些打包环境下可能会报错，此处静默处理
+    }
 }
