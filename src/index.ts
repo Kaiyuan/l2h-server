@@ -31,7 +31,10 @@ app.route('/api', api);
 app.route('/admin-api', admin);
 
 // 仪表盘后台静态文件服务
-app.use('/dashboard/*', serveStatic({ root: './src/admin/dist' }));
+app.use('/dashboard/*', serveStatic({ 
+  root: './src/admin/dist',
+  rewriteRequestPath: (path) => path.replace(/^\/dashboard/, '')
+}));
 app.get('/dashboard', (c) => c.redirect('/dashboard/'));
 
 // 网关逻辑导出供 Worker 使用
