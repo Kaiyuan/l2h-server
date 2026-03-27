@@ -14,6 +14,16 @@ const app = new Hono();
 app.use('*', logger());
 app.use('*', cors());
 
+// 中间件：透传反代后的真实客户端 IP
+app.use('*', async (c, next) => {
+  const forwarded = c.req.header('x-forwarded-for');
+  if (forwarded) {
+    const realIp = forwarded.split(',')[0].trim();
+    // 可以在这里扩展将 realIp 存入 context
+  }
+  await next();
+});
+
 // 中间件：检查管理员是否已初始化
 const setupMiddleware = async (c: any, next: any) => {
   const adminUser = db.prepare('SELECT * FROM users WHERE role = ?').get('admin');
