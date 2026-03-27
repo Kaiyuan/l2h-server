@@ -192,9 +192,14 @@ api.post('/webrtc/signal', async (c) => {
             console.log('--- 正在处理 WebRTC Offer ---');
             
             if (!datachannel) {
-                return c.json({ 
-                    error: 'Cloudflare Workers 不直接支持运行 WebRTC 节点。请将 l2h-server 部署在 Node.js (Docker/Native) 环境中以处理流量映射。' 
-                }, 501);
+                // 如果是流量节点（Node.js），它会在这里处理。
+                // 如果是云端（Worker），我们不报 501，而是尝试寻址是否有活跃的 Node.js 实例
+                const onlineCount = webrtcManager.getActiveSessionCount();
+                if (onlineCount === 0) {
+                    return c.json({ 
+                        error: '当前云端环境下不支持原生 WebRTC（缺失 node-datachannel）。且未检测到任何在线的 Node.js 穿透节点。请在您的本地或 VPS (Node.js/Docker) 环境下运行 l2h-server 实例。' 
+                    }, 503);
+                }
             }
 
             // 添加 Google 公共 STUN 服务器以协助发现网络路径
