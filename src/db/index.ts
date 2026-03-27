@@ -9,6 +9,7 @@ export const initDB = (platformDB?: any) => {
     const { join } = require('path');
     const dbPath = process.env.DB_PATH || join(process.cwd(), 'l2h.db');
     dbInstance = new Database(dbPath);
+    dbInstance.exec(SCHEMA);
 };
 
 // 初始化表模板
