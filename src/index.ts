@@ -3,7 +3,6 @@ import { HTTPException } from 'hono/http-exception';
 import { logger } from 'hono/logger';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
-import { serveStatic } from '@hono/node-server/serve-static';
 import * as config from './config.js';
 import { api } from './routes/api.js';
 import { admin } from './routes/admin.js';
@@ -14,6 +13,9 @@ const app = new Hono();
 app.use('*', logger());
 app.use('*', cors());
 
+// 检查环境：Node (Docker) 还是 Worker (Cloudflare)
+const isNode = typeof process !== 'undefined' && process.release && process.release.name === 'node';
+
 // 中间件：透传反代后的真实客户端 IP
 app.use('*', async (c, next) => {
   const forwarded = c.req.header('x-forwarded-for');
@@ -23,6 +25,19 @@ app.use('*', async (c, next) => {
   }
   await next();
 });
+
+// 动态适配静态资源服务
+if (isNode) {
+  // Docker/Node 环境：使用 @hono/node-server
+  const { serveStatic } = require('@hono/node-server/serve-static');
+  app.use('/dashboard/*', serveStatic({
+    root: './dist',
+    rewriteRequestPath: (path: string) => path.replace(/^\/dashboard/, '')
+  }));
+} else {
+    // Cloudflare 环境：通常静态资源由 Pages 本身托管，无需 Worker 处理
+}
+app.get('/dashboard', (c) => c.redirect('/dashboard/'));
 
 // 中间件：检查管理员是否已初始化
 const setupMiddleware = async (c: any, next: any) => {
@@ -40,11 +55,6 @@ app.use('*', setupMiddleware);
 app.route('/api', api);
 app.route('/admin-api', admin);
 
-// 仪表盘后台静态文件服务
-app.use('/dashboard/*', serveStatic({ 
-  root: './src/admin/dist',
-  rewriteRequestPath: (path) => path.replace(/^\/dashboard/, '')
-}));
 app.get('/dashboard', (c) => c.redirect('/dashboard/'));
 
 // 网关逻辑导出供 Worker 使用
