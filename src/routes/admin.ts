@@ -34,10 +34,9 @@ admin.get('/settings', async (c) => {
 
 admin.post('/settings', async (c) => {
     const body = await c.req.json();
-    const stmt = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
-    const transaction = db.transaction((data) => {
+    const transaction = db.transaction((data: Record<string, any>) => {
         for (const [key, value] of Object.entries(data)) {
-            stmt.run(key, String(value));
+            db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, String(value));
         }
     });
     transaction(body);

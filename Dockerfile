@@ -15,7 +15,7 @@ COPY package*.json ./
 RUN npm install --legacy-peer-deps
 
 COPY . .
-# Copy pre-built frontend
+# Copy pre-built frontend to the path serveStatic expects: ./src/admin/dist
 COPY --from=frontend-builder /app/src/admin/dist ./src/admin/dist
 
 EXPOSE 52331

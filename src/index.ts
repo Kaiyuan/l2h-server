@@ -1,5 +1,4 @@
 import { Hono } from 'hono';
-import { HTTPException } from 'hono/http-exception';
 import { logger } from 'hono/logger';
 import { cors } from 'hono/cors';
 import * as config from './config.js';
@@ -38,9 +37,10 @@ app.use('*', async (c, next) => {
 // 动态适配静态资源服务
 if (isNode) {
   // Docker/Node 环境：使用 @hono/node-server
+  // 前端 build 产物在 src/admin/dist，serveStatic root 相对于 process.cwd()
   const { serveStatic } = require('@hono/node-server/serve-static');
   app.use('/dashboard/*', serveStatic({
-    root: './dist',
+    root: './src/admin/dist',
     rewriteRequestPath: (path: string) => path.replace(/^\/dashboard/, '')
   }));
 } else {
@@ -187,6 +187,9 @@ export default app;
 
 // 如果在 Node 环境下运行
 if (isNode) {
+    // 初始化数据库 schema
+    initDB();
+
     try {
         const { serve } = require('@hono/node-server');
         const DEFAULT_PORT = config.PORT || 52331;
