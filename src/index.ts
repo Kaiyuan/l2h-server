@@ -138,7 +138,9 @@ app.post('/setup', async (c) => {
 });
 
 // 自动从环境变量初始化管理员 (仅 Node 环境在启动时执行)
-if (isNode) {
+async function initNodeEnv() {
+  initDB();
+
   const ADMIN_USER = process.env.ADMIN_USER;
   const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
   if (ADMIN_USER && ADMIN_PASSWORD) {
@@ -187,15 +189,17 @@ export default app;
 
 // 如果在 Node 环境下运行
 if (isNode) {
-    // 初始化数据库 schema
-    initDB();
-
-    try {
-        const { serve } = require('@hono/node-server');
-        const DEFAULT_PORT = config.PORT || 52331;
-        console.log(`Node.js 服务器启动: http://localhost:${DEFAULT_PORT}`);
-        serve({ fetch: app.fetch, port: DEFAULT_PORT as any });
-    } catch (e) {
-        // 在某些打包环境下可能会报错，此处静默处理
-    }
+    initNodeEnv().then(() => {
+        try {
+            const { serve } = require('@hono/node-server');
+            const DEFAULT_PORT = config.PORT || 52331;
+            console.log(`Node.js 服务器启动: http://localhost:${DEFAULT_PORT}`);
+            serve({ fetch: app.fetch, port: DEFAULT_PORT as any });
+        } catch (e) {
+            console.error('服务器启动失败:', e);
+        }
+    }).catch((e) => {
+        console.error('初始化失败:', e);
+        process.exit(1);
+    });
 }
